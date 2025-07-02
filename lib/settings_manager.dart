@@ -9,8 +9,8 @@ class SettingsManager extends ChangeNotifier {
 
   ThemeMode _themeMode = ThemeMode.dark;
   Color _accentColor = Colors.blue;
-  bool _pngOptimizationEnabled = false;
-  int _pngCompressionLevel = 0; // 0-9 (0=no compression, 9=max compression)
+  bool _pngOptimizationEnabled = true;
+  int _pngCompressionLevel = 5; // 0-9 (0=no compression, 9=max compression)
 
   ThemeMode get themeMode => _themeMode;
   Color get accentColor => _accentColor;
