@@ -17,12 +17,12 @@ jobs:
         with:
           channel: stable
 
-
       - name: Download Dependencies
         run: flutter pub get
 
       - name: Build
-        run: flutter build web --release
+        # Corrected base-href to match the GitHub repository name
+        run: flutter build web --release --base-href /flutter_meta_edit/
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v4
