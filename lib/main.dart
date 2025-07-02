@@ -569,11 +569,11 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
           Expanded(
             child: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) {
-                final bool useVerticalLayout = constraints.maxWidth < 700;
+                final bool useVerticalLayout = constraints.maxWidth < 800;
 
                 Widget buildImagePickerSection() {
                   return Container(
-                    margin: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.fromLTRB(16, 16, 8, 16),
                     child: DropTarget(
                       onDragEntered: (details) {
                         setState(() {
@@ -762,7 +762,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
 
                 Widget buildMetadataSection() {
                   return Container(
-                    margin: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.fromLTRB(8, 16, 16, 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1020,7 +1020,11 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                   return Column(
                     children: [
                       // Image picker at the top (with fixed height)
-                      SizedBox(height: 250, child: buildImagePickerSection()),
+                      SizedBox(
+                        height: 250,
+                        width: double.infinity,
+                        child: buildImagePickerSection(),
+                      ),
                       // Metadata section below (expandable)
                       Expanded(child: buildMetadataSection()),
                     ],
