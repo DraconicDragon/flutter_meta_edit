@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data' show Uint8List;
 
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
@@ -123,6 +124,114 @@ class MetadataWriter {
     }
   }
 
+  static Future<Uint8List?> writeMetadataToBytes(
+    Uint8List originalBytes,
+    String fileName,
+    Map<String, String> metadata, {
+    bool preserveImage = true,
+  }) async {
+    try {
+      final extension = fileName.split('.').last.toLowerCase();
+
+      switch (extension) {
+        case 'png':
+          return await _writePngMetadataToBytes(
+            originalBytes,
+            metadata,
+            preserveImage: preserveImage,
+          );
+        case 'jpg':
+        case 'jpeg':
+          // For now, return original bytes for JPEG (can be implemented later)
+          return originalBytes;
+        case 'webp':
+          // For now, return original bytes for WebP (can be implemented later)
+          return originalBytes;
+        default:
+          return null;
+      }
+    } catch (e) {
+      print('Error writing metadata to bytes: $e');
+      return null;
+    }
+  }
+
+  static Future<Uint8List?> _writePngMetadataToBytes(
+    Uint8List originalBytes,
+    Map<String, String> metadata, {
+    bool preserveImage = true,
+  }) async {
+    try {
+      // Decode the original image
+      final originalImage = img.decodeImage(originalBytes);
+      if (originalImage == null) return null;
+
+      // Create new image with same data
+      final newImage = img.Image.from(originalImage);
+
+      // Initialize textData if it doesn't exist
+      if (newImage.textData == null) {
+        newImage.textData = <String, String>{};
+      }
+
+      // Clear existing text chunks
+      newImage.textData!.clear();
+
+      // Add new metadata as text chunks
+      for (var entry in metadata.entries) {
+        String key = entry.key;
+        String value = entry.value;
+
+        // Skip read-only fields
+        if (_isReadOnlyField(key)) {
+          continue;
+        }
+
+        // Handle PNG text chunks
+        if (key.startsWith('PNG Text: ')) {
+          key = key.substring(10); // Remove "PNG Text: " prefix
+        }
+
+        // Map common metadata fields to PNG text chunk keywords
+        switch (key) {
+          case 'Artist':
+            newImage.textData!['Author'] = value;
+            break;
+          case 'Copyright':
+            newImage.textData!['Copyright'] = value;
+            break;
+          case 'Description':
+            newImage.textData!['Description'] = value;
+            break;
+          case 'Software':
+            newImage.textData!['Software'] = value;
+            break;
+          case 'parameters':
+            newImage.textData!['parameters'] = value;
+            break;
+          default:
+            // For other PNG text fields, use the key directly
+            newImage.textData![key] = value;
+            break;
+        }
+      }
+
+      // Get PNG compression settings
+      final settingsManager = SettingsManager();
+      final compressionLevel = settingsManager.pngOptimizationEnabled
+          ? settingsManager.pngCompressionLevel
+          : 0;
+
+      // Encode the image back to PNG bytes
+      final encodedBytes = img.encodePng(newImage, level: compressionLevel);
+
+      return Uint8List.fromList(encodedBytes);
+    } catch (e) {
+      print('Error writing PNG metadata to bytes: $e');
+      return null;
+    }
+  }
+
   static List<String> getEditableFields(String fileType) {
     switch (fileType.toLowerCase()) {
       case 'png':
@@ -165,6 +274,26 @@ class MetadataWriter {
       default:
         return [];
     }
+  }
+
+  static bool _isReadOnlyField(String key) {
+    const readOnlyFields = {
+      'File Name',
+      'File Size',
+      'File Path',
+      'Last Modified',
+      'File Type',
+      'Image Width',
+      'Image Height',
+      'Image Format',
+      'Megapixels',
+      'Bit Depth',
+      'Color Type',
+      'EXIF Image Width',
+      'EXIF Image Height',
+      'Color Space',
+    };
+    return readOnlyFields.contains(key);
   }
 
   static bool isFieldEditable(String fieldName, String fileType) {

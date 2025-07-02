@@ -2,9 +2,11 @@ import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
+import 'package:universal_html/html.dart' as html;
 
 import 'metadata_reader.dart';
 import 'metadata_writer.dart';
@@ -47,6 +49,9 @@ class MetaEditHomePage extends StatefulWidget {
 
 class _MetaEditHomePageState extends State<MetaEditHomePage> {
   File? _selectedFile;
+  Uint8List? _selectedFileBytes;
+  String? _selectedFileName;
+
   Map<String, String> _metadata = {};
   bool _isLoading = false;
   String? _errorMessage;
@@ -81,9 +86,21 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
         allowMultiple: false,
       );
 
-      if (result != null && result.files.single.path != null) {
-        final file = File(result.files.single.path!);
-        await _loadImageMetadata(file);
+      if (result != null) {
+        if (kIsWeb) {
+          // Web platform - use bytes
+          final bytes = result.files.single.bytes;
+          final fileName = result.files.single.name;
+          if (bytes != null) {
+            await _loadImageMetadataFromBytes(bytes, fileName);
+          }
+        } else {
+          // Desktop/mobile platform - use path
+          if (result.files.single.path != null) {
+            final file = File(result.files.single.path!);
+            await _loadImageMetadata(file);
+          }
+        }
       }
     } catch (e) {
       setState(() {
@@ -135,7 +152,132 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
     }
   }
 
-  Future<void> _saveMetadata({required bool createCopy}) async {
+  Future<void> _loadImageMetadataFromBytes(
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    try {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+        _selectedFile = null; // Clear file reference for web
+        _metadata.clear();
+        // Clear existing controllers
+        for (var controller in _controllers.values) {
+          controller.dispose();
+        }
+        _controllers.clear();
+      });
+
+      // Store bytes and filename for web
+      _selectedFileBytes = bytes;
+      _selectedFileName = fileName;
+
+      final metadata = await MetadataReader.readMetadataFromBytes(
+        bytes,
+        fileName,
+      );
+
+      // Create controllers for each metadata field
+      for (var entry in metadata.entries) {
+        _controllers[entry.key] = TextEditingController(text: entry.value);
+      }
+
+      // Reset field states
+      _collapsedFields.clear();
+      _fieldsToDelete.clear();
+
+      setState(() {
+        _metadata = metadata;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error reading metadata: $e';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _saveMetadata({bool createCopy = true}) async {
+    // Web: Always download with _edited suffix
+    if (kIsWeb) {
+      if (_selectedFileBytes == null || _selectedFileName == null) return;
+
+      try {
+        setState(() {
+          _isLoading = true;
+          _errorMessage = null;
+        });
+
+        // Update metadata map with controller values
+        final updatedMetadata = <String, String>{};
+        for (var entry in _controllers.entries) {
+          if (!_fieldsToDelete.contains(entry.key)) {
+            updatedMetadata[entry.key] = entry.value.text;
+          }
+        }
+
+        // Write metadata to bytes
+        final processedBytes = await MetadataWriter.writeMetadataToBytes(
+          _selectedFileBytes!,
+          _selectedFileName!,
+          updatedMetadata,
+          preserveImage: true,
+        );
+
+        if (processedBytes != null) {
+          // Create download filename with _edited suffix
+          final originalName = _selectedFileName!;
+          final extension = originalName.split('.').last;
+          final baseName = originalName.substring(
+            0,
+            originalName.length - extension.length - 1,
+          );
+          final downloadName = '${baseName}_edited.$extension';
+
+          // Trigger download
+          final blob = html.Blob([processedBytes]);
+          final url = html.Url.createObjectUrlFromBlob(blob);
+          final anchor = html.AnchorElement(href: url)
+            ..setAttribute('download', downloadName)
+            ..click();
+          html.Url.revokeObjectUrl(url);
+
+          // Update UI with the new data
+          _selectedFileBytes = processedBytes;
+          _selectedFileName = downloadName;
+          await _loadImageMetadataFromBytes(processedBytes, downloadName);
+
+          // Clear the delete list since changes were applied
+          _fieldsToDelete.clear();
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Downloaded edited file as $downloadName'),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+            ),
+          );
+        } else {
+          setState(() {
+            _errorMessage = 'Failed to process metadata for download.';
+          });
+        }
+      } catch (e) {
+        setState(() {
+          _errorMessage = 'Error saving metadata: $e';
+        });
+      } finally {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
+    // Desktop/Mobile logic (unchanged)
     if (_selectedFile == null) return;
 
     try {
@@ -144,20 +286,15 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
         _errorMessage = null;
       });
 
-      // Update metadata map with controller values
       final updatedMetadata = <String, String>{};
-
-      // Add all non-deleted fields
       for (var entry in _controllers.entries) {
         if (!_fieldsToDelete.contains(entry.key)) {
           updatedMetadata[entry.key] = entry.value.text;
         }
       }
 
-      // Determine target file
       File targetFile;
       if (createCopy) {
-        // Create a new file with _edited appended to the filename
         final originalPath = _selectedFile!.path;
         final extension = path.extension(originalPath);
         final basePath = originalPath.substring(
@@ -166,25 +303,19 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
         );
         final newPath = '${basePath}_edited$extension';
         targetFile = File(newPath);
-
-        // Copy the original file first to preserve the image data
         await _selectedFile!.copy(targetFile.path);
       } else {
-        // Use the original file
         targetFile = _selectedFile!;
       }
 
-      // Write metadata to the file
       final success = await MetadataWriter.writeMetadata(
         targetFile,
         updatedMetadata,
-        preserveImage: true, // Always preserve the image data
+        preserveImage: true,
       );
 
       if (success) {
-        // If we created a new file, load that one instead
         if (createCopy) {
-          // Get the new file path
           final originalPath = _selectedFile!.path;
           final extension = path.extension(originalPath);
           final basePath = originalPath.substring(
@@ -193,8 +324,6 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
           );
           final newPath = '${basePath}_edited$extension';
           final newFile = File(newPath);
-
-          // Load the new file
           await _loadImageMetadata(newFile);
 
           ScaffoldMessenger.of(context).showSnackBar(
@@ -204,7 +333,6 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
             ),
           );
         } else {
-          // Reload the original file
           await _loadImageMetadata(_selectedFile!);
 
           ScaffoldMessenger.of(context).showSnackBar(
@@ -214,8 +342,6 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
             ),
           );
         }
-
-        // Clear the delete list since changes were applied
         _fieldsToDelete.clear();
       } else {
         setState(() {
@@ -335,9 +461,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
     final fileType = _selectedFile != null
         ? path.extension(_selectedFile!.path).substring(1)
         : '';
-    final isEditable =
-        MetadataReader.isFieldEditable(key) &&
-        MetadataWriter.isFieldEditable(key, fileType);
+    final isEditable = MetadataReader.isFieldEditable(key.trim());
 
     // Check if this field is marked for deletion
     final isDeleted = _fieldsToDelete.contains(key);
@@ -408,7 +532,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                         ),
                       ),
                     // Delete button
-                    if (key.startsWith('PNG Text:'))
+                    if (key.trim().startsWith('PNG Text:'))
                       IconButton(
                         icon: Icon(
                           isDeleted ? Icons.restore : Icons.delete_outline,
@@ -591,15 +715,36 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                         });
 
                         if (details.files.isNotEmpty) {
-                          final file = File(details.files.first.path);
+                          final droppedFile = details.files.first;
 
-                          if (MetadataReader.isSupportedFile(file.path)) {
-                            await _loadImageMetadata(file);
+                          if (kIsWeb) {
+                            // Web platform - read as bytes
+                            final bytes = await droppedFile.readAsBytes();
+                            final fileName = droppedFile.name;
+
+                            if (MetadataReader.isSupportedFile(fileName)) {
+                              await _loadImageMetadataFromBytes(
+                                bytes,
+                                fileName,
+                              );
+                            } else {
+                              setState(() {
+                                _errorMessage =
+                                    'Unsupported file type. Please select a JPG, PNG, or WebP image.';
+                              });
+                            }
                           } else {
-                            setState(() {
-                              _errorMessage =
-                                  'Unsupported file type. Please select a JPG, PNG, or WebP image.';
-                            });
+                            // Desktop/mobile platform - use path
+                            final file = File(droppedFile.path);
+
+                            if (MetadataReader.isSupportedFile(file.path)) {
+                              await _loadImageMetadata(file);
+                            } else {
+                              setState(() {
+                                _errorMessage =
+                                    'Unsupported file type. Please select a JPG, PNG, or WebP image.';
+                              });
+                            }
                           }
                         }
                       },
@@ -620,7 +765,8 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              if (_selectedFile != null) ...[
+                              if (_selectedFile != null ||
+                                  _selectedFileBytes != null) ...[
                                 // Image preview
                                 Expanded(
                                   flex: 3,
@@ -628,8 +774,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                     child: Container(
                                       margin: const EdgeInsets.all(4),
                                       constraints: const BoxConstraints(
-                                        maxHeight:
-                                            300, // You can adjust this value as needed
+                                        maxHeight: 300,
                                       ),
                                       decoration: BoxDecoration(
                                         borderRadius: BorderRadius.circular(6),
@@ -639,33 +784,74 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                       ),
                                       child: ClipRRect(
                                         borderRadius: BorderRadius.circular(6),
-                                        child: Image.file(
-                                          _selectedFile!,
-                                          fit: BoxFit.contain,
-                                          errorBuilder:
-                                              (context, error, stackTrace) {
-                                                return Container(
-                                                  padding: const EdgeInsets.all(
-                                                    16,
-                                                  ),
-                                                  child: const Column(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment
-                                                            .center,
-                                                    children: [
-                                                      Icon(
-                                                        Icons.error_outline,
-                                                        color: Colors.red,
-                                                      ),
-                                                      SizedBox(height: 8),
-                                                      Text(
-                                                        'Cannot preview image',
-                                                      ),
-                                                    ],
-                                                  ),
-                                                );
-                                              },
-                                        ),
+                                        child:
+                                            kIsWeb && _selectedFileBytes != null
+                                            ? Image.memory(
+                                                _selectedFileBytes!,
+                                                fit: BoxFit.contain,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) {
+                                                      return Container(
+                                                        padding:
+                                                            const EdgeInsets.all(
+                                                              16,
+                                                            ),
+                                                        child: const Column(
+                                                          mainAxisAlignment:
+                                                              MainAxisAlignment
+                                                                  .center,
+                                                          children: [
+                                                            Icon(
+                                                              Icons
+                                                                  .error_outline,
+                                                              color: Colors.red,
+                                                            ),
+                                                            SizedBox(height: 8),
+                                                            Text(
+                                                              'Cannot preview image',
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      );
+                                                    },
+                                              )
+                                            : Image.file(
+                                                _selectedFile!,
+                                                fit: BoxFit.contain,
+                                                errorBuilder:
+                                                    (
+                                                      context,
+                                                      error,
+                                                      stackTrace,
+                                                    ) {
+                                                      return Container(
+                                                        padding:
+                                                            const EdgeInsets.all(
+                                                              16,
+                                                            ),
+                                                        child: const Column(
+                                                          mainAxisAlignment:
+                                                              MainAxisAlignment
+                                                                  .center,
+                                                          children: [
+                                                            Icon(
+                                                              Icons
+                                                                  .error_outline,
+                                                              color: Colors.red,
+                                                            ),
+                                                            SizedBox(height: 8),
+                                                            Text(
+                                                              'Cannot preview image',
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      );
+                                                    },
+                                              ),
                                       ),
                                     ),
                                   ),
@@ -693,9 +879,12 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                           const SizedBox(width: 6),
                                           Expanded(
                                             child: Text(
-                                              path.basename(
-                                                _selectedFile!.path,
-                                              ),
+                                              _selectedFile != null
+                                                  ? path.basename(
+                                                      _selectedFile!.path,
+                                                    )
+                                                  : (_selectedFileName ??
+                                                        'Unknown file'),
                                               style: const TextStyle(
                                                 color: Colors.green,
                                                 fontWeight: FontWeight.w600,
@@ -773,52 +962,66 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Metadata Fields',
-                                style: Theme.of(
-                                  context,
-                                ).textTheme.headlineSmall,
-                              ),
-                            ),
-                            if (_metadata.isNotEmpty && !_isLoading) ...[
-                              Text(
-                                '${_filteredMetadata.length} fields',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                onPressed: () =>
-                                    _saveMetadata(createCopy: true),
-                                icon: const Icon(
-                                  Icons.file_copy_outlined,
-                                  size: 16,
-                                ),
-                                label: const Text('Save Copy'),
-                              ),
-                              const SizedBox(width: 8),
-                              ElevatedButton.icon(
-                                onPressed: () =>
-                                    _saveMetadata(createCopy: false),
-                                icon: const Icon(Icons.save, size: 16),
+                        // Save buttons section - FIXED
+                        if (_metadata.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          if (kIsWeb)
+                            // Web: Only show one Save button that downloads with _edited suffix
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton.icon(
+                                onPressed: _isLoading
+                                    ? null
+                                    : () => _saveMetadata(),
+                                icon: const Icon(Icons.download),
+                                label: const Text('Save (Download)'),
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Theme.of(
-                                    context,
-                                  ).colorScheme.primary,
-                                  foregroundColor: Theme.of(
-                                    context,
-                                  ).colorScheme.onPrimary,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
                                 ),
-                                label: const Text('Save'),
                               ),
-                            ],
-                          ],
-                        ),
-                        const SizedBox(height: 16),
+                            )
+                          else
+                            // Desktop/Mobile: Show both Save Copy and Save buttons
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: _isLoading
+                                        ? null
+                                        : () => _saveMetadata(createCopy: true),
+                                    icon: const Icon(Icons.file_copy),
+                                    label: const Text('Save Copy'),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: _isLoading
+                                        ? null
+                                        : () =>
+                                              _saveMetadata(createCopy: false),
+                                    icon: const Icon(Icons.save),
+                                    label: const Text('Save'),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          const SizedBox(height: 16),
+                        ],
 
-                        // Search bar
+                        // Search bar - no changes needed
                         if (_metadata.isNotEmpty && !_isLoading)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 16),
@@ -838,6 +1041,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                             ),
                           ),
 
+                        // Rest of the content (loading, error, metadata sections)
                         if (_isLoading)
                           const Center(
                             child: Column(
@@ -1064,12 +1268,16 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
                 children: [
-                  if (_selectedFile != null) ...[
+                  if (_selectedFile != null ||
+                      (_selectedFileBytes != null &&
+                          _selectedFileName != null)) ...[
                     Icon(Icons.image, size: 16, color: Colors.grey[600]),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        path.basename(_selectedFile!.path),
+                        _selectedFile != null
+                            ? path.basename(_selectedFile!.path)
+                            : (_selectedFileName ?? 'Unknown file'),
                         style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                         overflow: TextOverflow.ellipsis,
                       ),

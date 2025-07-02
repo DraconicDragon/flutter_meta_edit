@@ -1,10 +1,191 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:exif/exif.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
 
 class MetadataReader {
+  static Future<Map<String, String>> readMetadataFromBytes(
+    Uint8List bytes,
+    String fileName,
+  ) async {
+    try {
+      final metadata = <String, String>{};
+      final extension = fileName.split('.').last.toLowerCase();
+
+      // Add comprehensive file info (same as desktop version)
+      metadata['File Name'] = fileName;
+      metadata['File Size'] = '${(bytes.length / 1024).toStringAsFixed(1)} KB';
+      metadata['File Type'] = extension.toUpperCase();
+
+      // Get current date as "Last Modified" since we can't get actual file date on web
+      final now = DateTime.now();
+      metadata['Last Modified'] =
+          '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')} ${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}:${now.second.toString().padLeft(2, '0')}';
+
+      // Decode image to get detailed info
+      final image = img.decodeImage(bytes);
+      if (image != null) {
+        metadata['Image Width'] = '${image.width}';
+        metadata['Image Height'] = '${image.height}';
+        metadata['Image Format'] = extension.toUpperCase();
+        metadata['Megapixels'] =
+            '${((image.width * image.height) / 1000000).toStringAsFixed(1)} MP';
+
+        // Add bit depth and color info if available
+        if (image.palette != null) {
+          metadata['Color Type'] = 'Palette';
+          metadata['Bit Depth'] = '8';
+        } else if (image.numChannels == 1) {
+          metadata['Color Type'] = 'Grayscale';
+          metadata['Bit Depth'] = '8';
+        } else if (image.numChannels == 3) {
+          metadata['Color Type'] = 'RGB';
+          metadata['Bit Depth'] = '24';
+        } else if (image.numChannels == 4) {
+          metadata['Color Type'] = 'RGBA';
+          metadata['Bit Depth'] = '32';
+        }
+      }
+
+      // Extract format-specific metadata
+      if (extension == 'jpg' || extension == 'jpeg') {
+        await _extractJpegMetadataFromBytes(bytes, metadata);
+      } else if (extension == 'png') {
+        await _extractPngMetadataFromBytes(bytes, metadata, image);
+      } else if (extension == 'webp') {
+        await _extractWebpMetadataFromBytes(bytes, metadata);
+      }
+
+      return metadata;
+    } catch (e) {
+      return {'Error': 'Failed to read metadata: $e'};
+    }
+  }
+
+  static Future<void> _extractJpegMetadataFromBytes(
+    Uint8List bytes,
+    Map<String, String> metadata,
+  ) async {
+    try {
+      final exifData = await readExifFromBytes(bytes);
+
+      if (exifData.isNotEmpty) {
+        for (var entry in exifData.entries) {
+          final key = entry.key;
+          final value = entry.value;
+
+          String readableKey = _getReadableExifTag(key);
+          String readableValue = value.toString();
+
+          metadata[readableKey] = readableValue;
+        }
+      }
+    } catch (e) {
+      metadata['EXIF Error'] = 'Could not read EXIF data: $e';
+    }
+  }
+
+  static Future<void> _extractPngMetadataFromBytes(
+    Uint8List bytes,
+    Map<String, String> metadata,
+    img.Image? image,
+  ) async {
+    try {
+      if (image?.textData != null && image!.textData!.isNotEmpty) {
+        for (var entry in image.textData!.entries) {
+          metadata['PNG Text: ${entry.key}'] = entry.value;
+        }
+      }
+
+      try {
+        final exifData = await readExifFromBytes(bytes);
+        if (exifData.isNotEmpty) {
+          for (var entry in exifData.entries) {
+            final key = entry.key;
+            final value = entry.value;
+
+            String readableKey = _getReadableExifTag(key);
+            String readableValue = value.toString();
+
+            metadata[readableKey] = readableValue;
+          }
+        }
+      } catch (e) {
+        // PNG might not have EXIF data, that's okay
+      }
+    } catch (e) {
+      metadata['PNG Error'] = 'Could not read PNG text chunks: $e';
+    }
+  }
+
+  static Future<void> _extractWebpMetadataFromBytes(
+    Uint8List bytes,
+    Map<String, String> metadata,
+  ) async {
+    try {
+      final exifData = await readExifFromBytes(bytes);
+      if (exifData.isNotEmpty) {
+        for (var entry in exifData.entries) {
+          final key = entry.key;
+          final value = entry.value;
+
+          String readableKey = _getReadableExifTag(key);
+          String readableValue = value.toString();
+
+          metadata[readableKey] = readableValue;
+        }
+      }
+    } catch (e) {
+      // WebP might not have EXIF data, that's okay
+    }
+  }
+
+  // Helper method to convert EXIF tags to readable names
+  static String _getReadableExifTag(String tag) {
+    const Map<String, String> tagNames = {
+      'Image Make': 'Camera Make',
+      'Image Model': 'Camera Model',
+      'Image Software': 'Software',
+      'Image DateTime': 'Date Taken',
+      'Image Artist': 'Artist',
+      'Image Copyright': 'Copyright',
+      'Image Description': 'Description',
+      'EXIF ExposureTime': 'Exposure Time',
+      'EXIF FNumber': 'F-Number',
+      'EXIF ISO': 'ISO Speed',
+      'EXIF ISOSpeedRatings': 'ISO Speed',
+      'EXIF DateTimeOriginal': 'Date Original',
+      'EXIF DateTimeDigitized': 'Date Digitized',
+      'EXIF ExposureBiasValue': 'Exposure Bias',
+      'EXIF MaxApertureValue': 'Max Aperture',
+      'EXIF SubjectDistance': 'Subject Distance',
+      'EXIF MeteringMode': 'Metering Mode',
+      'EXIF LightSource': 'Light Source',
+      'EXIF Flash': 'Flash',
+      'EXIF FocalLength': 'Focal Length',
+      'EXIF ColorSpace': 'Color Space',
+      'EXIF ExifImageWidth': 'EXIF Image Width',
+      'EXIF ExifImageLength': 'EXIF Image Height',
+      'EXIF WhiteBalance': 'White Balance',
+      'EXIF DigitalZoomRatio': 'Digital Zoom',
+      'EXIF FocalLengthIn35mmFilm': 'Focal Length (35mm)',
+      'EXIF SceneCaptureType': 'Scene Type',
+      'EXIF GainControl': 'Gain Control',
+      'EXIF Contrast': 'Contrast',
+      'EXIF Saturation': 'Saturation',
+      'EXIF Sharpness': 'Sharpness',
+      'GPS GPSLatitude': 'GPS Latitude',
+      'GPS GPSLongitude': 'GPS Longitude',
+      'GPS GPSAltitude': 'GPS Altitude',
+      'GPS GPSTimeStamp': 'GPS Time',
+      'GPS GPSDateStamp': 'GPS Date',
+    };
+
+    return tagNames[tag] ?? tag;
+  }
+
   static Future<Map<String, String>> readMetadata(File file) async {
     final extension = path.extension(file.path).toLowerCase();
     Map<String, String> metadata = {};
@@ -210,8 +391,8 @@ class MetadataReader {
   }
 
   /// Returns list of readonly metadata fields that should be displayed compactly
-  static List<String> getReadOnlyFields() {
-    return [
+  static Set<String> getReadOnlyFields() {
+    return {
       'File Name',
       'File Size',
       'File Path',
@@ -223,62 +404,40 @@ class MetadataReader {
       'Megapixels',
       'Bit Depth',
       'Color Type',
-    ];
+      // Add more technical fields that shouldn't be edited
+      'EXIF Image Width',
+      'EXIF Image Height',
+      'Color Space',
+    };
   }
 
   /// Returns true if a field is editable (PNG text chunks, EXIF fields, etc.)
-  static bool isFieldEditable(String key) {
-    // PNG text chunks are editable
-    if (key.startsWith('PNG Text:')) return true;
+  static bool isFieldEditable(String fieldName) {
+    // Read-only fields
+    if (getReadOnlyFields().contains(fieldName)) {
+      return false;
+    }
 
-    // Some common EXIF fields that can be edited
-    final editableExifFields = [
+    // PNG text chunks are always editable
+    if (fieldName.startsWith('PNG Text:')) {
+      return true;
+    }
+
+    // Common editable EXIF fields
+    const editableExifFields = {
       'Artist',
       'Copyright',
       'Description',
-      'ImageDescription',
       'Software',
+      'Camera Make',
+      'Camera Model',
+      'Date Taken',
+      'Date Original',
+      'parameters',
       'UserComment',
-      'parameters', // Common AI-generated image parameter field
-    ];
+      'ImageDescription',
+    };
 
-    // Check if it's an editable EXIF field
-    for (final field in editableExifFields) {
-      if (key.contains(field)) return true;
-    }
-
-    // Don't allow editing of readonly fields
-    if (getReadOnlyFields().contains(key)) return false;
-
-    // For other fields, allow editing if they seem like metadata rather than technical info
-    final technicalFields = [
-      'Error',
-      'JPEG Error',
-      'PNG Error',
-      'WebP Error',
-      'EXIF',
-      'GPS',
-      'Camera',
-      'Lens',
-      'Exposure',
-      'ISO',
-      'Focal',
-      'Flash',
-      'White Balance',
-      'Metering',
-      'Color Space',
-      'Resolution',
-      'Orientation',
-    ];
-
-    // If it contains technical terms, it's probably readonly
-    for (final term in technicalFields) {
-      if (key.contains(term) &&
-          !editableExifFields.any((field) => key.contains(field))) {
-        return false;
-      }
-    }
-
-    return true; // Default to editable for user-added fields
+    return editableExifFields.contains(fieldName);
   }
 }
