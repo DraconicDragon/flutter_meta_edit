@@ -46,6 +46,12 @@ dependencies:
   # Cross-platform path handling
   path: ^1.8.3
 
+  # Settings and preferences
+  shared_preferences: ^2.2.2
+
+  # Additional UI components
+  flex_color_picker: ^3.4.1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

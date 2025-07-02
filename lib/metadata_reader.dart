@@ -4,7 +4,7 @@ import 'package:exif/exif.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
 
-class MetadataHandler {
+class MetadataReader {
   static Future<Map<String, String>> readMetadata(File file) async {
     final extension = path.extension(file.path).toLowerCase();
     Map<String, String> metadata = {};
@@ -37,7 +37,7 @@ class MetadataHandler {
 
   static Future<Map<String, String>> _readJpegMetadata(File file) async {
     Map<String, String> metadata = {};
-
+    
     try {
       final bytes = await file.readAsBytes();
       final exifData = await readExifFromBytes(bytes);
@@ -89,10 +89,9 @@ class MetadataHandler {
         metadata['Image Width'] = image.width.toString();
         metadata['Image Height'] = image.height.toString();
         metadata['Image Format'] = 'JPEG';
-
+        
         // Calculate megapixels
-        final megapixels = (image.width * image.height / 1000000)
-            .toStringAsFixed(1);
+        final megapixels = (image.width * image.height / 1000000).toStringAsFixed(1);
         metadata['Megapixels'] = '$megapixels MP';
       }
     } catch (e) {
@@ -104,7 +103,7 @@ class MetadataHandler {
 
   static Future<Map<String, String>> _readPngMetadata(File file) async {
     Map<String, String> metadata = {};
-
+    
     try {
       final bytes = await file.readAsBytes();
       final image = img.decodeImage(bytes);
@@ -113,12 +112,11 @@ class MetadataHandler {
         metadata['Image Width'] = image.width.toString();
         metadata['Image Height'] = image.height.toString();
         metadata['Image Format'] = 'PNG';
-
+        
         // Calculate megapixels
-        final megapixels = (image.width * image.height / 1000000)
-            .toStringAsFixed(1);
+        final megapixels = (image.width * image.height / 1000000).toStringAsFixed(1);
         metadata['Megapixels'] = '$megapixels MP';
-
+        
         // PNG text chunks
         if (image.textData != null) {
           for (var entry in image.textData!.entries) {
@@ -151,7 +149,7 @@ class MetadataHandler {
 
   static Future<Map<String, String>> _readWebpMetadata(File file) async {
     Map<String, String> metadata = {};
-
+    
     try {
       final bytes = await file.readAsBytes();
       final image = img.decodeImage(bytes);
@@ -160,10 +158,9 @@ class MetadataHandler {
         metadata['Image Width'] = image.width.toString();
         metadata['Image Height'] = image.height.toString();
         metadata['Image Format'] = 'WebP';
-
+        
         // Calculate megapixels
-        final megapixels = (image.width * image.height / 1000000)
-            .toStringAsFixed(1);
+        final megapixels = (image.width * image.height / 1000000).toStringAsFixed(1);
         metadata['Megapixels'] = '$megapixels MP';
       }
 
@@ -207,5 +204,77 @@ class MetadataHandler {
   static bool isSupportedFile(String filePath) {
     final extension = path.extension(filePath).toLowerCase();
     return getSupportedExtensions().contains(extension);
+  }
+  
+  /// Returns list of readonly metadata fields that should be displayed compactly
+  static List<String> getReadOnlyFields() {
+    return [
+      'File Name',
+      'File Size', 
+      'File Path',
+      'Last Modified',
+      'File Type',
+      'Image Width',
+      'Image Height',
+      'Image Format',
+      'Megapixels',
+      'Bit Depth',
+      'Color Type'
+    ];
+  }
+  
+  /// Returns true if a field is editable (PNG text chunks, EXIF fields, etc.)
+  static bool isFieldEditable(String key) {
+    // PNG text chunks are editable
+    if (key.startsWith('PNG Text:')) return true;
+    
+    // Some common EXIF fields that can be edited
+    final editableExifFields = [
+      'Artist',
+      'Copyright', 
+      'Description',
+      'ImageDescription',
+      'Software',
+      'UserComment',
+      'parameters', // Common AI-generated image parameter field
+    ];
+    
+    // Check if it's an editable EXIF field
+    for (final field in editableExifFields) {
+      if (key.contains(field)) return true;
+    }
+    
+    // Don't allow editing of readonly fields
+    if (getReadOnlyFields().contains(key)) return false;
+    
+    // For other fields, allow editing if they seem like metadata rather than technical info
+    final technicalFields = [
+      'Error',
+      'JPEG Error',
+      'PNG Error', 
+      'WebP Error',
+      'EXIF',
+      'GPS',
+      'Camera',
+      'Lens',
+      'Exposure',
+      'ISO',
+      'Focal',
+      'Flash',
+      'White Balance',
+      'Metering',
+      'Color Space',
+      'Resolution',
+      'Orientation'
+    ];
+    
+    // If it contains technical terms, it's probably readonly
+    for (final term in technicalFields) {
+      if (key.contains(term) && !editableExifFields.any((field) => key.contains(field))) {
+        return false;
+      }
+    }
+    
+    return true; // Default to editable for user-added fields
   }
 }
