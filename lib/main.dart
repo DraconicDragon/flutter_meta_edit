@@ -51,7 +51,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
   bool _isLoading = false;
   String? _errorMessage;
   bool _isDragOver = false;
-  bool _isFileInfoExpanded = true;
+  bool _isFileInfoExpanded = false;
   final Map<String, TextEditingController> _controllers = {};
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
@@ -399,12 +399,12 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
       body: Column(
         children: [
           Expanded(
-            child: Row(
-              children: [
-                // Left side - Drop area / File picker
-                Expanded(
-                  flex: 1,
-                  child: Container(
+            child: LayoutBuilder(
+              builder: (BuildContext context, BoxConstraints constraints) {
+                final bool useVerticalLayout = constraints.maxWidth < 700;
+                
+                Widget buildImagePickerSection() {
+                  return Container(
                     margin: const EdgeInsets.all(16),
                     child: DropTarget(
                       onDragEntered: (details) {
@@ -471,26 +471,24 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                         fit: BoxFit.contain,
                                         errorBuilder:
                                             (context, error, stackTrace) {
-                                              return Container(
-                                                padding: const EdgeInsets.all(
-                                                  16,
+                                          return Container(
+                                            padding: const EdgeInsets.all(16),
+                                            child: const Column(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment.center,
+                                              children: [
+                                                Icon(
+                                                  Icons.error_outline,
+                                                  color: Colors.red,
                                                 ),
-                                                child: const Column(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      Icons.error_outline,
-                                                      color: Colors.red,
-                                                    ),
-                                                    SizedBox(height: 8),
-                                                    Text(
-                                                      'Cannot preview image',
-                                                    ),
-                                                  ],
+                                                SizedBox(height: 8),
+                                                Text(
+                                                  'Cannot preview image',
                                                 ),
-                                              );
-                                            },
+                                              ],
+                                            ),
+                                          );
+                                        },
                                       ),
                                     ),
                                   ),
@@ -589,13 +587,11 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                         ),
                       ),
                     ),
-                  ),
-                ),
-
-                // Right side - Metadata fields
-                Expanded(
-                  flex: 2,
-                  child: Container(
+                  );
+                }
+                
+                Widget buildMetadataSection() {
+                  return Container(
                     margin: const EdgeInsets.all(16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -605,9 +601,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                             Expanded(
                               child: Text(
                                 'Metadata Fields',
-                                style: Theme.of(
-                                  context,
-                                ).textTheme.headlineSmall,
+                                style: Theme.of(context).textTheme.headlineSmall,
                               ),
                             ),
                             if (_metadata.isNotEmpty && !_isLoading) ...[
@@ -660,14 +654,10 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.errorContainer,
+                              color: Theme.of(context).colorScheme.errorContainer,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.error.withOpacity(0.5),
+                                color: Theme.of(context).colorScheme.error.withOpacity(0.5),
                               ),
                             ),
                             child: Row(
@@ -681,9 +671,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                   child: Text(
                                     _errorMessage!,
                                     style: TextStyle(
-                                      color: Theme.of(
-                                        context,
-                                      ).colorScheme.onErrorContainer,
+                                      color: Theme.of(context).colorScheme.onErrorContainer,
                                     ),
                                   ),
                                 ),
@@ -744,50 +732,20 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                       },
                                       leading: Icon(
                                         Icons.info_outline,
-                                        color: Theme.of(
-                                          context,
-                                        ).colorScheme.primary,
+                                        color: Theme.of(context).colorScheme.primary,
                                       ),
                                       title: Text(
-                                        'File Information',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.titleMedium,
+                                        'File Information - ${_filteredMetadata.where((entry) => MetadataReader.getReadOnlyFields().contains(entry.key)).length} fields',
+                                        style: Theme.of(context).textTheme.titleMedium,
                                       ),
-                                      subtitle: Text(
-                                        '${_filteredMetadata.where((entry) => MetadataReader.getReadOnlyFields().contains(entry.key)).length} fields',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.bodySmall,
-                                      ),
+                                      childrenPadding: const EdgeInsets.symmetric(horizontal: 8),
                                       children: [
                                         Padding(
-                                          padding: const EdgeInsets.fromLTRB(
-                                            16,
-                                            0,
-                                            16,
-                                            16,
-                                          ),
+                                          padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                                           child: Column(
                                             children: _filteredMetadata
-                                                .where(
-                                                  (entry) =>
-                                                      MetadataReader.getReadOnlyFields()
-                                                          .contains(entry.key),
-                                                )
-                                                .map(
-                                                  (entry) => Padding(
-                                                    padding:
-                                                        const EdgeInsets.only(
-                                                          bottom: 4,
-                                                        ),
-                                                    child:
-                                                        _buildCompactReadOnlyField(
-                                                          entry.key,
-                                                          entry.value,
-                                                        ),
-                                                  ),
-                                                )
+                                                .where((entry) => MetadataReader.getReadOnlyFields().contains(entry.key))
+                                                .map((entry) => _buildCompactReadOnlyField(entry.key, entry.value))
                                                 .toList(),
                                           ),
                                         ),
@@ -804,18 +762,15 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                 )) ...[
                                   Text(
                                     'Metadata Fields',
-                                    style: Theme.of(
-                                      context,
-                                    ).textTheme.titleMedium,
+                                    style: Theme.of(context).textTheme.titleMedium,
                                   ),
                                   const SizedBox(height: 8),
                                   Expanded(
                                     child: ListView(
                                       children: _filteredMetadata
                                           .where(
-                                            (entry) =>
-                                                !MetadataReader.getReadOnlyFields()
-                                                    .contains(entry.key),
+                                            (entry) => !MetadataReader.getReadOnlyFields()
+                                                .contains(entry.key),
                                           )
                                           .map((entry) {
                                             final controller =
@@ -835,9 +790,43 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                           ),
                       ],
                     ),
-                  ),
-                ),
-              ],
+                  );
+                }
+                
+                // Choose layout based on screen width
+                if (useVerticalLayout) {
+                  return Column(
+                    children: [
+                      // Image picker at the top (with fixed height)
+                      SizedBox(
+                        height: 250, 
+                        child: buildImagePickerSection(),
+                      ),
+                      // Metadata section below (expandable)
+                      Expanded(
+                        child: buildMetadataSection(),
+                      ),
+                    ],
+                  );
+                } else {
+                  // Side by side layout for wider screens
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Left side - Image picker
+                      Expanded(
+                        flex: 1,
+                        child: buildImagePickerSection(),
+                      ),
+                      // Right side - Metadata fields
+                      Expanded(
+                        flex: 2,
+                        child: buildMetadataSection(),
+                      ),
+                    ],
+                  );
+                }
+              },
             ),
           ),
           // Status bar

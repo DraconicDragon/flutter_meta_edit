@@ -31,18 +31,27 @@ class MetadataWriter {
       // Create a new image with updated text data
       final newImage = img.Image.from(image);
       
-      // Clear existing text data
-      newImage.textData?.clear();
+      // Initialize text data if null
       newImage.textData ??= <String, String>{};
-
+      
+      // Keep track of which keys we've updated
+      final Set<String> updatedKeys = {};
+      
       // Add PNG text chunks from metadata
       for (var entry in metadata.entries) {
         if (entry.key.startsWith('PNG Text: ')) {
           final textKey = entry.key.substring('PNG Text: '.length);
           if (entry.value.isNotEmpty) {
             newImage.textData![textKey] = entry.value;
+            updatedKeys.add(textKey);
           }
         }
+      }
+      
+      // Process special text chunk: parameters (common in AI-generated images)
+      if (metadata.containsKey('parameters') && metadata['parameters']!.isNotEmpty) {
+        newImage.textData!['parameters'] = metadata['parameters']!;
+        updatedKeys.add('parameters');
       }
 
       // Add common metadata as PNG text chunks
@@ -54,6 +63,9 @@ class MetadataWriter {
         'Date Taken': 'Creation Time',
         'Camera Make': 'Camera Make',
         'Camera Model': 'Camera Model',
+        'Comment': 'Comment',
+        'Title': 'Title',
+        'Author': 'Author',
       };
 
       for (var entry in metadata.entries) {
@@ -83,10 +95,14 @@ class MetadataWriter {
     switch (fileType.toLowerCase()) {
       case 'png':
         return [
+          // Common fields
           'Artist',
           'Copyright',
           'Description', 
           'Software',
+          'parameters',
+          
+          // All PNG text fields are editable
           'PNG Text: Title',
           'PNG Text: Author',
           'PNG Text: Description',
@@ -96,6 +112,11 @@ class MetadataWriter {
           'PNG Text: Disclaimer',
           'PNG Text: Warning',
           'PNG Text: Creation Time',
+          'PNG Text: parameters',
+          
+          // Catch-all for any PNG text field
+          // This ensures all PNG text fields are considered editable
+          'PNG Text:',
         ];
       case 'jpg':
       case 'jpeg':
@@ -119,6 +140,17 @@ class MetadataWriter {
   }
 
   static bool isFieldEditable(String fieldName, String fileType) {
+    // If it's a PNG text field, it's always editable
+    if (fieldName.startsWith('PNG Text:') && fileType.toLowerCase() == 'png') {
+      return true;
+    }
+    
+    // For the 'parameters' field in PNG files (common in AI-generated images)
+    if (fieldName == 'parameters' && fileType.toLowerCase() == 'png') {
+      return true;
+    }
+    
+    // Check the standard list
     return getEditableFields(fileType).contains(fieldName);
   }
 }
