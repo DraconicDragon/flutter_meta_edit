@@ -127,7 +127,31 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
         _controllers.clear();
       });
 
+      // Show loading message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 12),
+              Text('Reading metadata...'),
+            ],
+          ),
+          duration: Duration(
+            seconds: 30,
+          ), // Long duration, will be dismissed when done
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+
       final metadata = await MetadataReader.readMetadata(file);
+
+      // Dismiss loading snackbar
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       // Create controllers for each metadata field
       for (var entry in metadata.entries) {
@@ -142,6 +166,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
         _metadata = metadata;
       });
     } catch (e) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       setState(() {
         _errorMessage = 'Error reading metadata: $e';
       });
@@ -173,10 +198,34 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
       _selectedFileBytes = bytes;
       _selectedFileName = fileName;
 
+      // Show loading message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 12),
+              Text('Reading metadata...'),
+            ],
+          ),
+          duration: Duration(
+            seconds: 30,
+          ), // Long duration, will be dismissed when done
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+
       final metadata = await MetadataReader.readMetadataFromBytes(
         bytes,
         fileName,
       );
+
+      // Dismiss loading snackbar
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       // Create controllers for each metadata field
       for (var entry in metadata.entries) {
@@ -191,6 +240,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
         _metadata = metadata;
       });
     } catch (e) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       setState(() {
         _errorMessage = 'Error reading metadata: $e';
       });
@@ -212,6 +262,25 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
           _errorMessage = null;
         });
 
+        // Show saving progress
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 12),
+                Text('Processing and saving metadata...'),
+              ],
+            ),
+            duration: Duration(seconds: 30),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+          ),
+        );
+
         // Update metadata map with controller values
         final updatedMetadata = <String, String>{};
         for (var entry in _controllers.entries) {
@@ -228,6 +297,9 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
           preserveImage: true,
         );
 
+        // Dismiss processing snackbar
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
         if (processedBytes != null) {
           // Create download filename with _edited suffix
           final originalName = _selectedFileName!;
@@ -241,7 +313,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
           // Trigger download
           final blob = html.Blob([processedBytes]);
           final url = html.Url.createObjectUrlFromBlob(blob);
-          final anchor = html.AnchorElement(href: url)
+          html.AnchorElement(href: url)
             ..setAttribute('download', downloadName)
             ..click();
           html.Url.revokeObjectUrl(url);
@@ -286,6 +358,25 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
         _errorMessage = null;
       });
 
+      // Show saving progress
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 12),
+              Text('Processing and saving metadata...'),
+            ],
+          ),
+          duration: Duration(seconds: 30),
+          backgroundColor: Theme.of(context).colorScheme.primary,
+        ),
+      );
+
       final updatedMetadata = <String, String>{};
       for (var entry in _controllers.entries) {
         if (!_fieldsToDelete.contains(entry.key)) {
@@ -313,6 +404,9 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
         updatedMetadata,
         preserveImage: true,
       );
+
+      // Dismiss processing snackbar
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       if (success) {
         if (createCopy) {
@@ -350,6 +444,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
         });
       }
     } catch (e) {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       setState(() {
         _errorMessage = 'Error saving metadata: $e';
       });

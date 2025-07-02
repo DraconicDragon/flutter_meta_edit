@@ -1,6 +1,6 @@
 import 'dart:io';
-import 'dart:typed_data' show Uint8List;
 
+import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
 
@@ -12,6 +12,32 @@ class MetadataWriter {
     Map<String, String> metadata, {
     bool preserveImage = true,
   }) async {
+    // Get settings before passing to isolate
+    final settingsManager = SettingsManager();
+
+    // Run in compute isolate to prevent UI blocking
+    return await compute(_writeMetadataIsolate, {
+      'filePath': file.path,
+      'metadata': metadata,
+      'preserveImage': preserveImage,
+      'pngOptimizationEnabled': settingsManager.pngOptimizationEnabled,
+      'pngCompressionLevel': settingsManager.pngCompressionLevel,
+    });
+  }
+
+  // Isolate function for file writing
+  static Future<bool> _writeMetadataIsolate(Map<String, dynamic> params) async {
+    final String filePath = params['filePath'];
+    final Map<String, String> metadata = Map<String, String>.from(
+      params['metadata'],
+    );
+    final bool preserveImage = params['preserveImage'];
+    // Pass compression settings as parameters to avoid accessing SettingsManager in isolate
+    final bool pngOptimizationEnabled =
+        params['pngOptimizationEnabled'] ?? false;
+    final int pngCompressionLevel = params['pngCompressionLevel'] ?? 0;
+
+    final file = File(filePath);
     final extension = path.extension(file.path).toLowerCase();
 
     try {
@@ -20,6 +46,8 @@ class MetadataWriter {
           file,
           metadata,
           preserveImage: preserveImage,
+          pngOptimizationEnabled: pngOptimizationEnabled,
+          pngCompressionLevel: pngCompressionLevel,
         );
       }
       // TODO: Add support for JPEG and WebP writing
@@ -34,6 +62,8 @@ class MetadataWriter {
     File file,
     Map<String, String> metadata, {
     bool preserveImage = true,
+    bool pngOptimizationEnabled = false,
+    int pngCompressionLevel = 0,
   }) async {
     try {
       final bytes = await file.readAsBytes();
@@ -93,10 +123,9 @@ class MetadataWriter {
         }
       }
 
-      // Get PNG optimization settings from SettingsManager
-      final settingsManager = SettingsManager();
-      final useOptimization = settingsManager.pngOptimizationEnabled;
-      final compressionLevel = settingsManager.pngCompressionLevel;
+      // Get PNG optimization settings from parameters (passed from main thread)
+      final useOptimization = pngOptimizationEnabled;
+      final compressionLevel = pngCompressionLevel;
 
       // Encode the image back to PNG
       // Use settings from SettingsManager for compression level
@@ -130,6 +159,33 @@ class MetadataWriter {
     Map<String, String> metadata, {
     bool preserveImage = true,
   }) async {
+    // Get settings before passing to isolate
+    final settingsManager = SettingsManager();
+
+    // Run in compute isolate to prevent UI blocking
+    return await compute(_writeMetadataToBytesIsolate, {
+      'originalBytes': originalBytes,
+      'fileName': fileName,
+      'metadata': metadata,
+      'preserveImage': preserveImage,
+      'pngOptimizationEnabled': settingsManager.pngOptimizationEnabled,
+      'pngCompressionLevel': settingsManager.pngCompressionLevel,
+    });
+  }
+
+  // Isolate function for bytes writing
+  static Future<Uint8List?> _writeMetadataToBytesIsolate(
+    Map<String, dynamic> params,
+  ) async {
+    final Uint8List originalBytes = params['originalBytes'];
+    final String fileName = params['fileName'];
+    final Map<String, String> metadata = Map<String, String>.from(
+      params['metadata'],
+    );
+    final bool preserveImage = params['preserveImage'];
+    final bool pngOptimizationEnabled =
+        params['pngOptimizationEnabled'] ?? false;
+    final int pngCompressionLevel = params['pngCompressionLevel'] ?? 0;
     try {
       final extension = fileName.split('.').last.toLowerCase();
 
@@ -139,6 +195,8 @@ class MetadataWriter {
             originalBytes,
             metadata,
             preserveImage: preserveImage,
+            pngOptimizationEnabled: pngOptimizationEnabled,
+            pngCompressionLevel: pngCompressionLevel,
           );
         case 'jpg':
         case 'jpeg':
@@ -160,6 +218,8 @@ class MetadataWriter {
     Uint8List originalBytes,
     Map<String, String> metadata, {
     bool preserveImage = true,
+    bool pngOptimizationEnabled = false,
+    int pngCompressionLevel = 0,
   }) async {
     try {
       // Decode the original image
@@ -216,11 +276,8 @@ class MetadataWriter {
         }
       }
 
-      // Get PNG compression settings
-      final settingsManager = SettingsManager();
-      final compressionLevel = settingsManager.pngOptimizationEnabled
-          ? settingsManager.pngCompressionLevel
-          : 0;
+      // Get PNG compression settings from parameters
+      final compressionLevel = pngOptimizationEnabled ? pngCompressionLevel : 0;
 
       // Encode the image back to PNG bytes
       final encodedBytes = img.encodePng(newImage, level: compressionLevel);

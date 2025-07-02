@@ -1,7 +1,7 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:exif/exif.dart';
+import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
 
@@ -10,6 +10,19 @@ class MetadataReader {
     Uint8List bytes,
     String fileName,
   ) async {
+    // Run in compute isolate to prevent UI blocking
+    return await compute(_readMetadataFromBytesIsolate, {
+      'bytes': bytes,
+      'fileName': fileName,
+    });
+  }
+
+  // Isolate function for bytes processing
+  static Future<Map<String, String>> _readMetadataFromBytesIsolate(
+    Map<String, dynamic> params,
+  ) async {
+    final Uint8List bytes = params['bytes'];
+    final String fileName = params['fileName'];
     try {
       final metadata = <String, String>{};
       final extension = fileName.split('.').last.toLowerCase();
@@ -187,6 +200,15 @@ class MetadataReader {
   }
 
   static Future<Map<String, String>> readMetadata(File file) async {
+    // Run in compute isolate to prevent UI blocking
+    return await compute(_readMetadataIsolate, file.path);
+  }
+
+  // Isolate function for file processing
+  static Future<Map<String, String>> _readMetadataIsolate(
+    String filePath,
+  ) async {
+    final file = File(filePath);
     final extension = path.extension(file.path).toLowerCase();
     Map<String, String> metadata = {};
 
