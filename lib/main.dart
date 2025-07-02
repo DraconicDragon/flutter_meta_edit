@@ -569,11 +569,11 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
           Expanded(
             child: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) {
-                final bool useVerticalLayout = constraints.maxWidth < 800;
+                final bool useVerticalLayout = constraints.maxWidth < 825;
 
                 Widget buildImagePickerSection() {
                   return Container(
-                    margin: const EdgeInsets.fromLTRB(16, 16, 8, 16),
+                    margin: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                     child: DropTarget(
                       onDragEntered: (details) {
                         setState(() {
@@ -624,52 +624,59 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                 // Image preview
                                 Expanded(
                                   flex: 3,
-                                  child: Container(
-                                    margin: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: Colors.grey.withOpacity(0.3),
+                                  child: Center(
+                                    child: Container(
+                                      margin: const EdgeInsets.all(4),
+                                      constraints: const BoxConstraints(
+                                        maxHeight:
+                                            300, // You can adjust this value as needed
                                       ),
-                                    ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: Image.file(
-                                        _selectedFile!,
-                                        fit: BoxFit.contain,
-                                        errorBuilder:
-                                            (context, error, stackTrace) {
-                                              return Container(
-                                                padding: const EdgeInsets.all(
-                                                  16,
-                                                ),
-                                                child: const Column(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  children: [
-                                                    Icon(
-                                                      Icons.error_outline,
-                                                      color: Colors.red,
-                                                    ),
-                                                    SizedBox(height: 8),
-                                                    Text(
-                                                      'Cannot preview image',
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            },
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: Colors.grey.withOpacity(0.3),
+                                        ),
+                                      ),
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(6),
+                                        child: Image.file(
+                                          _selectedFile!,
+                                          fit: BoxFit.contain,
+                                          errorBuilder:
+                                              (context, error, stackTrace) {
+                                                return Container(
+                                                  padding: const EdgeInsets.all(
+                                                    16,
+                                                  ),
+                                                  child: const Column(
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .center,
+                                                    children: [
+                                                      Icon(
+                                                        Icons.error_outline,
+                                                        color: Colors.red,
+                                                      ),
+                                                      SizedBox(height: 8),
+                                                      Text(
+                                                        'Cannot preview image',
+                                                      ),
+                                                    ],
+                                                  ),
+                                                );
+                                              },
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                                const SizedBox(height: 16),
+                                const SizedBox(height: 0),
                                 // File info
                                 Container(
-                                  padding: const EdgeInsets.all(12),
+                                  padding: const EdgeInsets.all(6),
                                   decoration: BoxDecoration(
                                     color: Colors.green.withOpacity(0.1),
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(6),
                                     border: Border.all(
                                       color: Colors.green.withOpacity(0.3),
                                     ),
@@ -683,7 +690,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                             color: Colors.green,
                                             size: 20,
                                           ),
-                                          const SizedBox(width: 8),
+                                          const SizedBox(width: 6),
                                           Expanded(
                                             child: Text(
                                               path.basename(
@@ -698,7 +705,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 4),
+                                      const SizedBox(height: 2),
                                       Row(
                                         children: [
                                           Text(
@@ -762,7 +769,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
 
                 Widget buildMetadataSection() {
                   return Container(
-                    margin: const EdgeInsets.fromLTRB(8, 16, 16, 16),
+                    margin: const EdgeInsets.fromLTRB(12, 8, 12, 12),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -1048,7 +1055,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
           Container(
             height: 32,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               border: Border(
                 top: BorderSide(color: Colors.grey.withOpacity(0.3)),
               ),
