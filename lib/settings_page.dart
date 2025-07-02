@@ -44,7 +44,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  
+
                   // Theme Mode Selection
                   Text(
                     'Theme Mode',
@@ -75,9 +75,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       setState(() {});
                     },
                   ),
-                  
+
                   const SizedBox(height: 24),
-                  
+
                   // Accent Color Selection
                   Text(
                     'Accent Color',
@@ -103,8 +103,9 @@ class _SettingsPageState extends State<SettingsPage> {
                           Colors.cyan,
                         ];
                         final color = colors[index];
-                        final isSelected = _settingsManager.accentColor.value == color.value;
-                        
+                        final isSelected =
+                            _settingsManager.accentColor.value == color.value;
+
                         return Padding(
                           padding: EdgeInsets.only(
                             right: index < colors.length - 1 ? 12 : 0,
@@ -152,9 +153,9 @@ class _SettingsPageState extends State<SettingsPage> {
               ),
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // About Section
           Card(
             child: Padding(
@@ -203,11 +204,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(
-                        Icons.favorite,
-                        size: 16,
-                        color: Colors.red,
-                      ),
+                      Icon(Icons.favorite, size: 16, color: Colors.red),
                       const SizedBox(width: 8),
                       Text(
                         'Made with love for photographers and developers',

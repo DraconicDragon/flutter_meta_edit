@@ -53,6 +53,9 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
   bool _isDragOver = false;
   bool _isFileInfoExpanded = false;
   final Map<String, TextEditingController> _controllers = {};
+  final Map<String, bool> _collapsedFields =
+      {}; // Track which fields are collapsed
+  final Set<String> _fieldsToDelete = {}; // Track fields marked for deletion
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
@@ -114,6 +117,10 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
         _controllers[entry.key] = TextEditingController(text: entry.value);
       }
 
+      // Reset field states
+      _collapsedFields.clear();
+      _fieldsToDelete.clear();
+
       setState(() {
         _metadata = metadata;
       });
@@ -128,7 +135,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
     }
   }
 
-  Future<void> _saveMetadata() async {
+  Future<void> _saveMetadata({required bool createCopy}) async {
     if (_selectedFile == null) return;
 
     try {
@@ -139,26 +146,77 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
 
       // Update metadata map with controller values
       final updatedMetadata = <String, String>{};
+
+      // Add all non-deleted fields
       for (var entry in _controllers.entries) {
-        updatedMetadata[entry.key] = entry.value.text;
+        if (!_fieldsToDelete.contains(entry.key)) {
+          updatedMetadata[entry.key] = entry.value.text;
+        }
       }
 
-      // Write metadata back to file
+      // Determine target file
+      File targetFile;
+      if (createCopy) {
+        // Create a new file with _edited appended to the filename
+        final originalPath = _selectedFile!.path;
+        final extension = path.extension(originalPath);
+        final basePath = originalPath.substring(
+          0,
+          originalPath.length - extension.length,
+        );
+        final newPath = '${basePath}_edited$extension';
+        targetFile = File(newPath);
+
+        // Copy the original file first to preserve the image data
+        await _selectedFile!.copy(targetFile.path);
+      } else {
+        // Use the original file
+        targetFile = _selectedFile!;
+      }
+
+      // Write metadata to the file
       final success = await MetadataWriter.writeMetadata(
-        _selectedFile!,
+        targetFile,
         updatedMetadata,
+        preserveImage: true, // Always preserve the image data
       );
 
       if (success) {
-        // Reload metadata to reflect changes
-        await _loadImageMetadata(_selectedFile!);
+        // If we created a new file, load that one instead
+        if (createCopy) {
+          // Get the new file path
+          final originalPath = _selectedFile!.path;
+          final extension = path.extension(originalPath);
+          final basePath = originalPath.substring(
+            0,
+            originalPath.length - extension.length,
+          );
+          final newPath = '${basePath}_edited$extension';
+          final newFile = File(newPath);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Metadata saved successfully!'),
-            backgroundColor: Theme.of(context).colorScheme.primary,
-          ),
-        );
+          // Load the new file
+          await _loadImageMetadata(newFile);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Saved copy as ${path.basename(newPath)}'),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+            ),
+          );
+        } else {
+          // Reload the original file
+          await _loadImageMetadata(_selectedFile!);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('File updated successfully!'),
+              backgroundColor: Theme.of(context).colorScheme.primary,
+            ),
+          );
+        }
+
+        // Clear the delete list since changes were applied
+        _fieldsToDelete.clear();
       } else {
         setState(() {
           _errorMessage =
@@ -240,6 +298,35 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
     );
   }
 
+  // Show confirmation dialog for deleting a field
+  void _showDeleteConfirmation(String key) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Field?'),
+        content: Text(
+          'Are you sure you want to delete the field "$key"? This change will be applied when you save the file.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _fieldsToDelete.add(key);
+              });
+              Navigator.of(context).pop();
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEditableField(
     String key,
     String value,
@@ -252,82 +339,163 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
         MetadataReader.isFieldEditable(key) &&
         MetadataWriter.isFieldEditable(key, fileType);
 
+    // Check if this field is marked for deletion
+    final isDeleted = _fieldsToDelete.contains(key);
+    // Get the collapsed state (default to false if not set)
+    final isCollapsed = _collapsedFields[key] ?? false;
+
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
+      color: isDeleted ? Colors.red.withOpacity(0.1) : null,
       child: Padding(
         padding: const EdgeInsets.all(12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(
-                  _getIconForField(key),
-                  size: 16,
-                  color: _getColorForField(key),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    key,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+            // Header row with field name and buttons
+            InkWell(
+              onTap: () {
+                setState(() {
+                  _collapsedFields[key] = !isCollapsed;
+                });
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 4),
+                child: Row(
+                  children: [
+                    Icon(
+                      _getIconForField(key),
+                      size: 16,
                       color: _getColorForField(key),
                     ),
-                  ),
-                ),
-                if (!isEditable)
-                  Tooltip(
-                    message: 'This field is read-only for $fileType files',
-                    child: Icon(Icons.lock, size: 16, color: Colors.grey[500]),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Stack(
-              children: [
-                TextField(
-                  controller: controller,
-                  maxLines: value.length > 100 ? null : 1,
-                  enabled: isEditable,
-                  decoration: InputDecoration(
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                    contentPadding: const EdgeInsets.fromLTRB(12, 12, 44, 12),
-                  ),
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: isEditable ? null : Colors.grey[600],
-                  ),
-                ),
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: IconButton(
-                    icon: const Icon(Icons.copy, size: 16),
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: controller.text));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Copied "$key" to clipboard'),
-                          duration: const Duration(seconds: 2),
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.primary,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Icon(
+                            isCollapsed
+                                ? Icons.arrow_right
+                                : Icons.arrow_drop_down,
+                            size: 20,
+                            color: Colors.grey,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              key,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                                color: _getColorForField(key),
+                                decoration: isDeleted
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Status icons
+                    if (!isEditable)
+                      Tooltip(
+                        message: 'This field is read-only for $fileType files',
+                        child: Icon(
+                          Icons.lock,
+                          size: 16,
+                          color: Colors.grey[500],
                         ),
-                      );
-                    },
-                    tooltip: 'Copy to clipboard',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(
-                      minWidth: 32,
-                      minHeight: 32,
+                      ),
+                    // Delete button
+                    if (key.startsWith('PNG Text:'))
+                      IconButton(
+                        icon: Icon(
+                          isDeleted ? Icons.restore : Icons.delete_outline,
+                          size: 16,
+                          color: isDeleted ? Colors.green : Colors.red[300],
+                        ),
+                        tooltip: isDeleted ? 'Restore field' : 'Delete field',
+                        onPressed: () {
+                          // Toggle delete status
+                          if (isDeleted) {
+                            setState(() {
+                              _fieldsToDelete.remove(key);
+                            });
+                          } else {
+                            _showDeleteConfirmation(key);
+                          }
+                        },
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 28,
+                          minHeight: 28,
+                        ),
+                      ),
+                    const SizedBox(width: 4),
+                    // Collapse indicator
+                    Icon(
+                      isCollapsed ? Icons.expand_more : Icons.expand_less,
+                      size: 16,
+                      color: Colors.grey[400],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Content area that collapses
+            if (!isCollapsed) ...[
+              const SizedBox(height: 8),
+              Stack(
+                children: [
+                  TextField(
+                    controller: controller,
+                    maxLines: value.length > 100 ? null : 1,
+                    enabled: isEditable && !isDeleted,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                      contentPadding: const EdgeInsets.fromLTRB(12, 12, 44, 12),
+                      filled: isDeleted,
+                      fillColor: isDeleted
+                          ? Colors.red.withOpacity(0.05)
+                          : null,
+                    ),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDeleted
+                          ? Colors.red[300]
+                          : (isEditable ? null : Colors.grey[600]),
                     ),
                   ),
-                ),
-              ],
-            ),
+                  Positioned(
+                    top: 4,
+                    right: 4,
+                    child: IconButton(
+                      icon: const Icon(Icons.copy, size: 16),
+                      onPressed: () {
+                        Clipboard.setData(ClipboardData(text: controller.text));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Copied "$key" to clipboard'),
+                            duration: const Duration(seconds: 2),
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
+                          ),
+                        );
+                      },
+                      tooltip: 'Copy to clipboard',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(
+                        minWidth: 32,
+                        minHeight: 32,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -402,7 +570,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
             child: LayoutBuilder(
               builder: (BuildContext context, BoxConstraints constraints) {
                 final bool useVerticalLayout = constraints.maxWidth < 700;
-                
+
                 Widget buildImagePickerSection() {
                   return Container(
                     margin: const EdgeInsets.all(16),
@@ -471,24 +639,26 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                         fit: BoxFit.contain,
                                         errorBuilder:
                                             (context, error, stackTrace) {
-                                          return Container(
-                                            padding: const EdgeInsets.all(16),
-                                            child: const Column(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(
-                                                  Icons.error_outline,
-                                                  color: Colors.red,
+                                              return Container(
+                                                padding: const EdgeInsets.all(
+                                                  16,
                                                 ),
-                                                SizedBox(height: 8),
-                                                Text(
-                                                  'Cannot preview image',
+                                                child: const Column(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  children: [
+                                                    Icon(
+                                                      Icons.error_outline,
+                                                      color: Colors.red,
+                                                    ),
+                                                    SizedBox(height: 8),
+                                                    Text(
+                                                      'Cannot preview image',
+                                                    ),
+                                                  ],
                                                 ),
-                                              ],
-                                            ),
-                                          );
-                                        },
+                                              );
+                                            },
                                       ),
                                     ),
                                   ),
@@ -589,7 +759,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                     ),
                   );
                 }
-                
+
                 Widget buildMetadataSection() {
                   return Container(
                     margin: const EdgeInsets.all(16),
@@ -601,7 +771,9 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                             Expanded(
                               child: Text(
                                 'Metadata Fields',
-                                style: Theme.of(context).textTheme.headlineSmall,
+                                style: Theme.of(
+                                  context,
+                                ).textTheme.headlineSmall,
                               ),
                             ),
                             if (_metadata.isNotEmpty && !_isLoading) ...[
@@ -611,8 +783,27 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                               ),
                               const SizedBox(width: 8),
                               ElevatedButton.icon(
-                                onPressed: _saveMetadata,
+                                onPressed: () =>
+                                    _saveMetadata(createCopy: true),
+                                icon: const Icon(
+                                  Icons.file_copy_outlined,
+                                  size: 16,
+                                ),
+                                label: const Text('Save Copy'),
+                              ),
+                              const SizedBox(width: 8),
+                              ElevatedButton.icon(
+                                onPressed: () =>
+                                    _saveMetadata(createCopy: false),
                                 icon: const Icon(Icons.save, size: 16),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.primary,
+                                  foregroundColor: Theme.of(
+                                    context,
+                                  ).colorScheme.onPrimary,
+                                ),
                                 label: const Text('Save'),
                               ),
                             ],
@@ -654,10 +845,14 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Theme.of(context).colorScheme.errorContainer,
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.errorContainer,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: Theme.of(context).colorScheme.error.withOpacity(0.5),
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.error.withOpacity(0.5),
                               ),
                             ),
                             child: Row(
@@ -671,7 +866,9 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                   child: Text(
                                     _errorMessage!,
                                     style: TextStyle(
-                                      color: Theme.of(context).colorScheme.onErrorContainer,
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.onErrorContainer,
                                     ),
                                   ),
                                 ),
@@ -732,20 +929,42 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                       },
                                       leading: Icon(
                                         Icons.info_outline,
-                                        color: Theme.of(context).colorScheme.primary,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
                                       ),
                                       title: Text(
                                         'File Information - ${_filteredMetadata.where((entry) => MetadataReader.getReadOnlyFields().contains(entry.key)).length} fields',
-                                        style: Theme.of(context).textTheme.titleMedium,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.titleMedium,
                                       ),
-                                      childrenPadding: const EdgeInsets.symmetric(horizontal: 8),
+                                      childrenPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                          ),
                                       children: [
                                         Padding(
-                                          padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                                          padding: const EdgeInsets.fromLTRB(
+                                            8,
+                                            0,
+                                            8,
+                                            8,
+                                          ),
                                           child: Column(
                                             children: _filteredMetadata
-                                                .where((entry) => MetadataReader.getReadOnlyFields().contains(entry.key))
-                                                .map((entry) => _buildCompactReadOnlyField(entry.key, entry.value))
+                                                .where(
+                                                  (entry) =>
+                                                      MetadataReader.getReadOnlyFields()
+                                                          .contains(entry.key),
+                                                )
+                                                .map(
+                                                  (entry) =>
+                                                      _buildCompactReadOnlyField(
+                                                        entry.key,
+                                                        entry.value,
+                                                      ),
+                                                )
                                                 .toList(),
                                           ),
                                         ),
@@ -762,15 +981,18 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                                 )) ...[
                                   Text(
                                     'Metadata Fields',
-                                    style: Theme.of(context).textTheme.titleMedium,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleMedium,
                                   ),
                                   const SizedBox(height: 8),
                                   Expanded(
                                     child: ListView(
                                       children: _filteredMetadata
                                           .where(
-                                            (entry) => !MetadataReader.getReadOnlyFields()
-                                                .contains(entry.key),
+                                            (entry) =>
+                                                !MetadataReader.getReadOnlyFields()
+                                                    .contains(entry.key),
                                           )
                                           .map((entry) {
                                             final controller =
@@ -792,20 +1014,15 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                     ),
                   );
                 }
-                
+
                 // Choose layout based on screen width
                 if (useVerticalLayout) {
                   return Column(
                     children: [
                       // Image picker at the top (with fixed height)
-                      SizedBox(
-                        height: 250, 
-                        child: buildImagePickerSection(),
-                      ),
+                      SizedBox(height: 250, child: buildImagePickerSection()),
                       // Metadata section below (expandable)
-                      Expanded(
-                        child: buildMetadataSection(),
-                      ),
+                      Expanded(child: buildMetadataSection()),
                     ],
                   );
                 } else {
@@ -814,15 +1031,9 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Left side - Image picker
-                      Expanded(
-                        flex: 1,
-                        child: buildImagePickerSection(),
-                      ),
+                      Expanded(flex: 1, child: buildImagePickerSection()),
                       // Right side - Metadata fields
-                      Expanded(
-                        flex: 2,
-                        child: buildMetadataSection(),
-                      ),
+                      Expanded(flex: 2, child: buildMetadataSection()),
                     ],
                   );
                 }
