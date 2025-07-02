@@ -230,9 +230,7 @@ class MetadataWriter {
       final newImage = img.Image.from(originalImage);
 
       // Initialize textData if it doesn't exist
-      if (newImage.textData == null) {
-        newImage.textData = <String, String>{};
-      }
+      newImage.textData ??= <String, String>{};
 
       // Clear existing text chunks
       newImage.textData!.clear();
