@@ -33,9 +33,8 @@ class SettingsManager extends ChangeNotifier {
     _accentColor = Color(colorValue);
 
     // Load PNG optimization settings
-    _pngOptimizationEnabled =
-        prefs.getBool(_pngOptimizationEnabledKey) ?? false;
-    _pngCompressionLevel = prefs.getInt(_pngCompressionLevelKey) ?? 0;
+    _pngOptimizationEnabled = prefs.getBool(_pngOptimizationEnabledKey) ?? true;
+    _pngCompressionLevel = prefs.getInt(_pngCompressionLevelKey) ?? 5;
 
     notifyListeners();
   }

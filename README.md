@@ -5,8 +5,9 @@ My preferences also required the app to look nice, not be 100-200mb in size and 
 Note: This program just happens to be able to edit and save the modified metadata fields, its more of a byproduct because i couldnt resist asking ai to just add it for me. Only tested PNG but hopefully jpeg and webp work fine too.
 maybe conversion support soon:tm: since i dabbled into that in python before but dart seems to be too much effort for this.
 
-technically runs on web but untested except png a bit, is laggy kinda, maybe github actions + pages build soon
+technically runs on web but untested except png a bit, is laggy kinda, theres a github pages build here https://draconicdragon.github.io/flutter_meta_edit/ 
 
+android build possibly possible too but my internet too slow to bother because the dev stuff takes an eternity
 
 showcase or something, works the same on linux
 ![alt text](image.png)
