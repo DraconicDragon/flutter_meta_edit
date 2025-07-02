@@ -122,9 +122,12 @@ class _SettingsPageState extends State<SettingsPage> {
                                 color: color,
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: isSelected
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Colors.transparent,
+                                  color:
+                                      isSelected
+                                          ? Theme.of(
+                                            context,
+                                          ).colorScheme.primary
+                                          : Colors.transparent,
                                   width: 3,
                                 ),
                                 boxShadow: [
@@ -136,13 +139,14 @@ class _SettingsPageState extends State<SettingsPage> {
                                   ),
                                 ],
                               ),
-                              child: isSelected
-                                  ? const Icon(
-                                      Icons.check,
-                                      color: Colors.white,
-                                      size: 24,
-                                    )
-                                  : null,
+                              child:
+                                  isSelected
+                                      ? const Icon(
+                                        Icons.check,
+                                        color: Colors.white,
+                                        size: 24,
+                                      )
+                                      : null,
                             ),
                           ),
                         );
@@ -211,9 +215,8 @@ class _SettingsPageState extends State<SettingsPage> {
 
                   // PNG Compression Level Slider
                   AnimatedOpacity(
-                    opacity: _settingsManager.pngOptimizationEnabled
-                        ? 1.0
-                        : 0.5,
+                    opacity:
+                        _settingsManager.pngOptimizationEnabled ? 1.0 : 0.5,
                     duration: const Duration(milliseconds: 200),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -244,17 +247,19 @@ class _SettingsPageState extends State<SettingsPage> {
                                 min: 0,
                                 max: 9,
                                 divisions: 9,
-                                value: _settingsManager.pngCompressionLevel
-                                    .toDouble(),
+                                value:
+                                    _settingsManager.pngCompressionLevel
+                                        .toDouble(),
                                 onChanged:
                                     _settingsManager.pngOptimizationEnabled
-                                    ? (value) {
-                                        _settingsManager.setPngCompressionLevel(
-                                          value.toInt(),
-                                        );
-                                        setState(() {});
-                                      }
-                                    : null,
+                                        ? (value) {
+                                          _settingsManager
+                                              .setPngCompressionLevel(
+                                                value.toInt(),
+                                              );
+                                          setState(() {});
+                                        }
+                                        : null,
                               ),
                             ),
                             Text(
@@ -318,17 +323,6 @@ class _SettingsPageState extends State<SettingsPage> {
                       const SizedBox(width: 8),
                       Text(
                         'Built with Flutter',
-                        style: Theme.of(context).textTheme.bodySmall,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Icon(Icons.favorite, size: 16, color: Colors.red),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Made with love for photographers and developers',
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                     ],
