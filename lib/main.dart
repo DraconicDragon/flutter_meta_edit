@@ -276,7 +276,7 @@ class _MetaEditHomePageState extends State<MetaEditHomePage> {
                 key,
                 style: TextStyle(
                   fontWeight: FontWeight.w500,
-                  fontSize: 11,
+                  fontSize: 11.5, // Increased from 11 to 11.5
                   color: _getColorForField(key),
                 ),
               ),

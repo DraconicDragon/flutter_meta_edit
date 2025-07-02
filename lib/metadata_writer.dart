@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:image/image.dart' as img;
 import 'package:path/path.dart' as path;
 
+import 'settings_manager.dart';
+
 class MetadataWriter {
   static Future<bool> writeMetadata(
     File file,
@@ -90,11 +92,18 @@ class MetadataWriter {
         }
       }
 
+      // Get PNG optimization settings from SettingsManager
+      final settingsManager = SettingsManager();
+      final useOptimization = settingsManager.pngOptimizationEnabled;
+      final compressionLevel = settingsManager.pngCompressionLevel;
+
       // Encode the image back to PNG
-      // Use maximum quality/compression settings to ensure no data loss
+      // Use settings from SettingsManager for compression level
       final newBytes = img.encodePng(
         newImage,
-        level: 0, // 0 = no compression, to ensure image quality
+        level: useOptimization
+            ? compressionLevel
+            : 0, // 0 = no compression, 9 = max compression
       );
 
       // Only create a backup if we're not creating a copy elsewhere

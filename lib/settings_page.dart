@@ -156,6 +156,127 @@ class _SettingsPageState extends State<SettingsPage> {
 
           const SizedBox(height: 16),
 
+          // PNG Settings Card
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.image,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'PNG Settings',
+                        style: Theme.of(context).textTheme.titleLarge,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // PNG Optimization Toggle
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Enable PNG Compression',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            Text(
+                              'When disabled, PNG files will be saved without compression for maximum quality.',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                      Switch(
+                        value: _settingsManager.pngOptimizationEnabled,
+                        onChanged: (value) {
+                          _settingsManager.setPngOptimizationEnabled(value);
+                          setState(() {});
+                        },
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // PNG Compression Level Slider
+                  AnimatedOpacity(
+                    opacity: _settingsManager.pngOptimizationEnabled
+                        ? 1.0
+                        : 0.5,
+                    duration: const Duration(milliseconds: 200),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'Compression Level',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            Text(
+                              '${_settingsManager.pngCompressionLevel}',
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Text(
+                              'Lower',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            Expanded(
+                              child: Slider(
+                                min: 0,
+                                max: 9,
+                                divisions: 9,
+                                value: _settingsManager.pngCompressionLevel
+                                    .toDouble(),
+                                onChanged:
+                                    _settingsManager.pngOptimizationEnabled
+                                    ? (value) {
+                                        _settingsManager.setPngCompressionLevel(
+                                          value.toInt(),
+                                        );
+                                        setState(() {});
+                                      }
+                                    : null,
+                              ),
+                            ),
+                            Text(
+                              'Higher',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
+                        ),
+                        Text(
+                          'Higher compression reduces file size but may take longer to save.',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
           // About Section
           Card(
             child: Padding(

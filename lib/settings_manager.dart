@@ -4,12 +4,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 class SettingsManager extends ChangeNotifier {
   static const String _themeKey = 'theme_mode';
   static const String _accentColorKey = 'accent_color';
+  static const String _pngOptimizationEnabledKey = 'png_optimization_enabled';
+  static const String _pngCompressionLevelKey = 'png_compression_level';
 
   ThemeMode _themeMode = ThemeMode.dark;
   Color _accentColor = Colors.blue;
+  bool _pngOptimizationEnabled = false;
+  int _pngCompressionLevel = 0; // 0-9 (0=no compression, 9=max compression)
 
   ThemeMode get themeMode => _themeMode;
   Color get accentColor => _accentColor;
+  bool get pngOptimizationEnabled => _pngOptimizationEnabled;
+  int get pngCompressionLevel => _pngCompressionLevel;
 
   static final SettingsManager _instance = SettingsManager._internal();
   factory SettingsManager() => _instance;
@@ -26,6 +32,11 @@ class SettingsManager extends ChangeNotifier {
     final colorValue = prefs.getInt(_accentColorKey) ?? Colors.blue.value;
     _accentColor = Color(colorValue);
 
+    // Load PNG optimization settings
+    _pngOptimizationEnabled =
+        prefs.getBool(_pngOptimizationEnabledKey) ?? false;
+    _pngCompressionLevel = prefs.getInt(_pngCompressionLevelKey) ?? 0;
+
     notifyListeners();
   }
 
@@ -40,6 +51,21 @@ class SettingsManager extends ChangeNotifier {
     _accentColor = color;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setInt(_accentColorKey, color.value);
+    notifyListeners();
+  }
+
+  Future<void> setPngOptimizationEnabled(bool enabled) async {
+    _pngOptimizationEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_pngOptimizationEnabledKey, enabled);
+    notifyListeners();
+  }
+
+  Future<void> setPngCompressionLevel(int level) async {
+    // Ensure level is between 0 and 9
+    _pngCompressionLevel = level.clamp(0, 9);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_pngCompressionLevelKey, _pngCompressionLevel);
     notifyListeners();
   }
 
